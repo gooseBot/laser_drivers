@@ -189,6 +189,7 @@ public:
 
     if (hasParam("~min_ang_degrees"))
     {
+			ROS_WARN("~min_ang_degrees is deprecated. Please use radians instead.");
       getParam("~min_ang_degrees", min_ang_);
       min_ang_ *= M_PI/180;
     }
@@ -203,6 +204,7 @@ public:
 
     if (hasParam("~max_ang_degrees"))
     {
+			ROS_WARN("~max_ang_degrees is deprecated. Please use radians instead.");
       getParam("~max_ang_degrees", max_ang_);
       max_ang_ *= M_PI/180;
     }

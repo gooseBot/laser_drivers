@@ -37,12 +37,12 @@ using namespace SickToolbox;
 using namespace std;
 
 void publish_scan(ros::Publisher *pub, uint32_t *values, uint32_t num_values, 
-                  double scale, ros::Time start, bool inverted)
+            double scale, ros::Time start, bool inverted, std::string frame_id)
 {
   static int scan_count = 0;
   static double last_print_time = 0;
   sensor_msgs::LaserScan scan_msg;
-  scan_msg.header.frame_id = "base_laser";
+  scan_msg.header.frame_id = frame_id;
   scan_count++;
   ros::Time t = start;
   double t_d = t.toSec();
@@ -86,12 +86,14 @@ int main(int argc, char **argv)
   string port;
   int baud;
   bool inverted;
+	std::string frame_id = "base_laser";
 
   ros::NodeHandle nh;
   ros::Publisher scan_pub = nh.advertise<sensor_msgs::LaserScan>("scan", 1);
   nh.param("sicklms/port", port, string("/dev/ttyUSB0"));
   nh.param("sicklms/baud", baud, 500000);
   nh.param("sicklms/inverted", inverted, true);
+	nh.getParam("sicklms/frame_id", frame_id);
 
   SickLMS::sick_lms_baud_t desired_baud = SickLMS::IntToSickBaud(baud);
   if (desired_baud == SickLMS::SICK_BAUD_UNKNOWN)
@@ -128,7 +130,7 @@ int main(int argc, char **argv)
     {
       ros::Time start = ros::Time::now();
       sick_lms.GetSickScan(values, num_values);
-      publish_scan(&scan_pub, values, num_values, scale, start, inverted); 
+      publish_scan(&scan_pub, values, num_values, scale, start, inverted, frame_id); 
       ros::spinOnce();
     }
   }

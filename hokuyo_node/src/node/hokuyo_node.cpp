@@ -104,7 +104,7 @@ Reads the following parameters from the parameter server
 #include <sstream>
 #include <iomanip>
 
-#include "ros/node.h"
+#include "ros/ros.h"
 #include "ros/time.h"
 #include "ros/common.h"
 
@@ -118,9 +118,14 @@ Reads the following parameters from the parameter server
 
 using namespace std;
 
-class HokuyoNode: public ros::Node
+class HokuyoNode
 {
 private:
+  ros::NodeHandle nh_;
+  ros::NodeHandle private_nh_;
+
+  ros::Publisher scan_publisher_;
+
   hokuyo::LaserScan  scan_;
   hokuyo::LaserConfig cfg_;
 
@@ -149,9 +154,9 @@ public:
   string device_status_;
   string connect_fail_;
 
-  HokuyoNode() : ros::Node("hokuyo"), running_(false), count_(0), self_test_(this), diagnostic_(this)
+  HokuyoNode() :  private_nh_("~"), running_(false), count_(0), self_test_(this), diagnostic_(this)
   {
-    advertise<sensor_msgs::LaserScan>("scan", 100);
+    scan_publisher_ = nh_.advertise<sensor_msgs::LaserScan>("scan", 100);
     
     read_config();
 
@@ -175,62 +180,62 @@ public:
 
   void read_config()
   {
-    if (hasParam("~min_ang_degrees") && hasParam("~min_ang"))
+    if (private_nh_.hasParam("min_ang_degrees") && private_nh_.hasParam("min_ang"))
     {
       ROS_FATAL("Minimum angle is specified in both radians and degrees");
-      shutdown();
+      ros::shutdown();
     }
 
-    if (hasParam("~max_ang_degrees") && hasParam("~max_ang"))
+    if (private_nh_.hasParam("max_ang_degrees") && private_nh_.hasParam("max_ang"))
     {
       ROS_FATAL("Maximum angle is specified in both radians and degrees");
-      shutdown();
+      ros::shutdown();
     }
 
-    if (hasParam("~min_ang_degrees"))
+    if (private_nh_.hasParam("min_ang_degrees"))
     {
-			ROS_WARN("~min_ang_degrees is deprecated. Please use radians instead.");
-      getParam("~min_ang_degrees", min_ang_);
+      ROS_WARN("~min_ang_degrees is deprecated. Please use radians instead.");
+      private_nh_.getParam("min_ang_degrees", min_ang_);
       min_ang_ *= M_PI/180;
     }
-    else if (hasParam("~min_ang"))
+    else if (private_nh_.hasParam("min_ang"))
     {
-      getParam("~min_ang", min_ang_);
+      private_nh_.getParam("min_ang", min_ang_);
     }
     else
     {
       min_ang_ = -M_PI/2.0;
     }
 
-    if (hasParam("~max_ang_degrees"))
+    if (private_nh_.hasParam("max_ang_degrees"))
     {
-			ROS_WARN("~max_ang_degrees is deprecated. Please use radians instead.");
-      getParam("~max_ang_degrees", max_ang_);
+      ROS_WARN("~max_ang_degrees is deprecated. Please use radians instead.");
+      private_nh_.getParam("max_ang_degrees", max_ang_);
       max_ang_ *= M_PI/180;
     }
-    else if (hasParam("~max_ang"))
+    else if (private_nh_.hasParam("max_ang"))
     {
-      getParam("~max_ang", max_ang_);
+      private_nh_.getParam("max_ang", max_ang_);
     }
     else
     {
       max_ang_ = M_PI/2.0;
     }
 
-    param("~intensity", intensity_, true);
-    param("~cluster", cluster_, 1);
-    param("~skip", skip_, 1);
-    param("~port", port_, string("/dev/ttyACM0"));
-    param("~autostart", autostart_, true);
-    param("~calibrate_time", calibrate_time_, true);
-    param("~hokuyoLaserModel04LX", LaserIsHokuyoModel04LX, false);  // LaserIsHokuyoModel04LX must be set to true via this parameter for a model 04LX rangefinder
-    param("~frameid", frameid_, string("FRAMEID_LASER"));
+    private_nh_.param("intensity", intensity_, true);
+    private_nh_.param("cluster", cluster_, 1);
+    private_nh_.param("skip", skip_, 1);
+    private_nh_.param("port", port_, string("/dev/ttyACM0"));
+    private_nh_.param("autostart", autostart_, true);
+    private_nh_.param("calibrate_time", calibrate_time_, true);
+    private_nh_.param("hokuyoLaserModel04LX", LaserIsHokuyoModel04LX, false);  // LaserIsHokuyoModel04LX must be set to true via this parameter for a model 04LX rangefinder
+    private_nh_.param("frameid", frameid_, string("FRAMEID_LASER"));
   }
 
   void check_reconfigure()
   {
     bool need_reconfigure;
-    param("~reconfigure", need_reconfigure, false);
+    private_nh_.param("reconfigure", need_reconfigure, false);
     if (need_reconfigure)
     {
       ROS_INFO("Reconfigured the hokuyo.");
@@ -244,7 +249,7 @@ public:
       if (was_running)
         start();
 
-      setParam("~reconfigure", false);
+      private_nh_.setParam("reconfigure", false);
       diagnostic_.force_update();
     }
   }
@@ -286,10 +291,10 @@ public:
      
       laser_.getConfig(config);
 
-      setParam("~min_ang_limit", (double)(config.min_angle));
-      setParam("~max_ang_limit", (double)(config.max_angle));
-      setParam("~min_range", (double)(config.min_range));
-      setParam("~max_range", (double)(config.max_range));
+      private_nh_.setParam("min_ang_limit", (double)(config.min_angle));
+      private_nh_.setParam("max_ang_limit", (double)(config.max_angle));
+      private_nh_.setParam("min_range", (double)(config.min_range));
+      private_nh_.setParam("max_range", (double)(config.max_range));
 
       // first parameter false when 04LX laser used because 04LX sensor only accepts MD commands, not ME commands
       int status = laser_.requestScans(!LaserIsHokuyoModel04LX && intensity_, min_ang_, max_ang_, cluster_, skip_);
@@ -363,7 +368,7 @@ public:
     scan_msg_.header.stamp = ros::Time().fromNSec((uint64_t)scan_.system_time_stamp);
     scan_msg_.header.frame_id = frameid_;
 
-    publish("scan", scan_msg_);
+    scan_publisher_.publish(scan_msg_);
 
     count_++;
     
@@ -375,11 +380,11 @@ public:
   bool spin()
   {
     // Start up the laser
-    while (ok())
+    while (nh_.ok())
     {
       if (autostart_ && start() == 0)
       {
-        while(ok()) {
+        while(nh_.ok()) {
           if(publishScan() < 0)
             break;
           self_test_.checkTest();
@@ -459,7 +464,7 @@ public:
   {
     status.name = "Interruption Test";
 
-    if (numSubscribers("scan") == 0)
+    if (scan_publisher_.getNumSubscribers() == 0)
     {
       status.level = 0;
       status.message = "No operation interrupted.";
@@ -669,7 +674,7 @@ public:
 int
 main(int argc, char** argv)
 {
-  ros::init(argc, argv);
+  ros::init(argc, argv, "hokuyo");
 
   HokuyoNode h;
 

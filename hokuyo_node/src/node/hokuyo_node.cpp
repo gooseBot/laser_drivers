@@ -390,12 +390,14 @@ public:
           self_test_.checkTest();
           diagnostic_.update();
           check_reconfigure();
+          ros::spinOnce();
         }
       } else {
         usleep(100000);
         self_test_.checkTest();
         diagnostic_.update();
         check_reconfigure();
+        ros::spinOnce();
       }
     }
 

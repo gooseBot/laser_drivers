@@ -116,6 +116,8 @@ Reads the following parameters from the parameter server
 
 #include "hokuyo.h"
 
+#include <boost/thread.hpp>
+
 using namespace std;
 
 class HokuyoNode
@@ -390,14 +392,12 @@ public:
           self_test_.checkTest();
           diagnostic_.update();
           check_reconfigure();
-          ros::spinOnce();
         }
       } else {
         usleep(100000);
         self_test_.checkTest();
         diagnostic_.update();
         check_reconfigure();
-        ros::spinOnce();
       }
     }
 
@@ -679,7 +679,7 @@ main(int argc, char** argv)
   ros::init(argc, argv, "hokuyo");
 
   HokuyoNode h;
-
+  boost::thread ros_spin_thread(boost::bind(ros::spin));
   h.spin();
 
   return(0);

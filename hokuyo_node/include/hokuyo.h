@@ -29,6 +29,7 @@
 #include <termios.h>
 #include <string>
 #include <vector>
+#include <stdint.h>
 
 //! A namespace containing the hokuyo device driver
 namespace hokuyo

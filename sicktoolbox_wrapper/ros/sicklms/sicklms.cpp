@@ -37,118 +37,140 @@ using namespace SickToolbox;
 using namespace std;
 
 void publish_scan(ros::Publisher *pub, uint32_t *values, uint32_t num_values, 
-            double scale, ros::Time start, bool inverted, std::string frame_id)
+		double scale, ros::Time start, double scan_time, bool inverted, std::string frame_id)
 {
-  static int scan_count = 0;
-  static double last_print_time = 0;
-  sensor_msgs::LaserScan scan_msg;
-  scan_msg.header.frame_id = frame_id;
-  scan_count++;
-  ros::Time t = start;
-  double t_d = t.toSec();
-  if (t_d > last_print_time + 1)
-  {
-    last_print_time = t_d;
-    printf("publishing scan %d\n", scan_count);
-  }
-  if (inverted) {
-    scan_msg.angle_min = M_PI/2;
-    scan_msg.angle_max = -M_PI/2;
-  } else {
-    scan_msg.angle_min = -M_PI/2; 
-    scan_msg.angle_max = M_PI/2; 
-  }
-  scan_msg.angle_increment = (scan_msg.angle_max - scan_msg.angle_min) / (double)(num_values-1); 
-  //scan_msg.time_increment = 1.0 / 37.5; 
-  scan_msg.time_increment = 1.0 / 75.0; //37.5; 
-  scan_msg.range_min = 0;
-  if (scale == 0.01)
-    scan_msg.range_max = 81;
-  else if (scale == 0.001)
-    scan_msg.range_max = 8.1;
-  scan_msg.set_ranges_size(num_values);
-  scan_msg.header.stamp = t;
-  for (size_t i = 0; i < num_values; i++)
-    scan_msg.ranges[i] = (float)values[i] * (float)scale;
-/*  
+	static int scan_count = 0;
+	static double last_print_time = 0;
+	sensor_msgs::LaserScan scan_msg;
+	scan_msg.header.frame_id = frame_id;
+	scan_count++;
+	ros::Time t = start;
+	double t_d = t.toSec();
+	if (t_d > last_print_time + 1)	{
+		last_print_time = t_d;
+		printf("publishing scan %d\n", scan_count);
+	}
+	if (inverted) {
+		scan_msg.angle_min = M_PI/2;
+		scan_msg.angle_max = -M_PI/2;
+	} else {
+		scan_msg.angle_min = -M_PI/2;
+		scan_msg.angle_max = M_PI/2;
+	}
+	scan_msg.angle_increment = (scan_msg.angle_max - scan_msg.angle_min) / (double)(num_values-1);
+	scan_msg.scan_time = scan_time;
+	scan_msg.time_increment = scan_time / (double)(num_values-1);
+	scan_msg.range_min = 0;
+	if (scale == 0.01) {
+		scan_msg.range_max = 81;
+	}
+	else if (scale == 0.001) {
+		scan_msg.range_max = 8.1;
+	}
+	scan_msg.set_ranges_size(num_values);
+	scan_msg.header.stamp = t;
+	for (size_t i = 0; i < num_values; i++) {
+		scan_msg.ranges[i] = (float)values[i] * (float)scale;
+	}
+	/*
   static double prev_time = 0;
   double cur_time = ros::Time::now().toSec();
   if (rand() % 10 == 0)
     printf("%f\n", cur_time - prev_time);
   prev_time = cur_time;
-*/
-  pub->publish(scan_msg);
+	 */
+	pub->publish(scan_msg);
 }
 
 int main(int argc, char **argv)
 {
-  ros::init(argc, argv, "sicklms");
-  string port;
-  int baud;
-  bool inverted;
-	std::string frame_id = "base_laser";
+	ros::init(argc, argv, "sicklms");
+	string port;
+	int baud;
+	bool inverted;
+	std::string frame_id;
+	double scan_time = 0;
 
-  ros::NodeHandle nh;
-  ros::Publisher scan_pub = nh.advertise<sensor_msgs::LaserScan>("scan", 1);
-  nh.param("sicklms/port", port, string("/dev/ttyUSB0"));
-  nh.param("sicklms/baud", baud, 500000);
-  nh.param("sicklms/inverted", inverted, true);
-	nh.getParam("sicklms/frame_id", frame_id);
+	ros::NodeHandle nh;
+	ros::NodeHandle nh_ns("~");
+	ros::Publisher scan_pub = nh.advertise<sensor_msgs::LaserScan>("scan", 1);
+	nh_ns.param("port", port, string("/dev/ttyUSB0"));
+	nh_ns.param("baud", baud, 500000);
+	nh_ns.param("inverted", inverted, true);
+	nh_ns.param<std::string>("frame_id", frame_id, "base_laser");
 
-  SickLMS::sick_lms_baud_t desired_baud = SickLMS::IntToSickBaud(baud);
-  if (desired_baud == SickLMS::SICK_BAUD_UNKNOWN)
-  {
-    fprintf(stderr, "baud rate must be in {9600, 19200, 38400, 500000}\n");
-    return 1;
-  }
-  uint32_t values[SickLMS::SICK_MAX_NUM_MEASUREMENTS] = {0};
-  uint32_t num_values = 0;
-  SickLMS sick_lms(port);
-  double scale = 0;
+	SickLMS::sick_lms_baud_t desired_baud = SickLMS::IntToSickBaud(baud);
+	if (desired_baud == SickLMS::SICK_BAUD_UNKNOWN)
+	{
+		ROS_ERROR("Baud rate must be in {9600, 19200, 38400, 500000}");
+		return 1;
+	}
+	uint32_t values[SickLMS::SICK_MAX_NUM_MEASUREMENTS] = {0};
+	uint32_t num_values = 0;
+	SickLMS sick_lms(port);
+	double scale = 0;
 
-  try
-  {
-    sick_lms.Initialize(desired_baud);
-    SickLMS::sick_lms_measuring_units_t u = sick_lms.GetSickMeasuringUnits();
-    if (u == SickLMS::SICK_MEASURING_UNITS_CM)
-      scale = 0.01;
-    else if (u == SickLMS::SICK_MEASURING_UNITS_MM)
-      scale = 0.001;
-    else
-    {
-      fprintf(stderr, "bogus measuring unit.\n");
-      return 1;
-    }
-  }
-  catch (...)
-  {
-    printf("initialize failed! are you using the correct device path?\n");
-  }
-  try
-  {
-    while (ros::ok())
-    {
-      ros::Time start = ros::Time::now();
-      sick_lms.GetSickScan(values, num_values);
-      publish_scan(&scan_pub, values, num_values, scale, start, inverted, frame_id); 
-      ros::spinOnce();
-    }
-  }
-  catch (...)
-  {
-    printf("woah! error!\n");
-  }
-  try
-  {
-    sick_lms.Uninitialize();
-  }
-  catch (...)
-  {
-    printf("error during uninitialize\n");
-    return 1;
-  }
-  printf("success.\n");
-  
-  return 0;
+	try
+	{
+		sick_lms.Initialize(desired_baud);
+		SickLMS::sick_lms_measuring_units_t u = sick_lms.GetSickMeasuringUnits();
+		if (u == SickLMS::SICK_MEASURING_UNITS_CM)
+			scale = 0.01;
+		else if (u == SickLMS::SICK_MEASURING_UNITS_MM)
+			scale = 0.001;
+		else
+		{
+			ROS_ERROR("Bogus measuring unit.");
+			return 1;
+		}
+
+		double scan_res = sick_lms.GetSickScanResolution();
+		SickLMS::sick_lms_scan_resolution_t scan_resolution = SickLMS::DoubleToSickScanResolution(scan_res);
+
+		if ( scan_resolution == SickLMS::SICK_SCAN_RESOLUTION_25) {  // 0.25 degrees
+			scan_time = 4.0 / 75;   // 53.33 ms
+		}
+		else if ( scan_resolution == SickLMS::SICK_SCAN_RESOLUTION_50) {  // 0.5 degrees
+			scan_time = 2.0 / 75;   // 26.66 ms
+		}
+		else if ( scan_resolution == SickLMS::SICK_SCAN_RESOLUTION_100) { // 1 degree
+			scan_time = 1.0 / 75;   // 13.33 ms
+		}
+		else {
+			ROS_ERROR("Bogus scan resolution.");
+			return 1;
+		}
+	}
+	catch (...)
+	{
+		ROS_ERROR("Initialise failed! are you using the correct device path?");
+	}
+	try
+	{
+		while (ros::ok())
+		{
+			ros::Time start = ros::Time::now();
+			sick_lms.GetSickScan(values, num_values);
+			publish_scan(&scan_pub, values, num_values, scale, start, scan_time, inverted, frame_id);
+			ros::spinOnce();
+		}
+	}
+	catch (...)
+	{
+		ROS_ERROR("woah! error!");
+		return 1;
+	}
+	try
+	{
+		sick_lms.Uninitialize();
+	}
+	catch (...)
+	{
+		ROS_ERROR("error during uninitialize");
+		return 1;
+	}
+	ROS_INFO("success.\n");
+
+	return 0;
 }
 

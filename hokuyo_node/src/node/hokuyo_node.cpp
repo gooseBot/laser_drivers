@@ -240,6 +240,7 @@ public:
     private_nh_.param("reconfigure", need_reconfigure, false);
     if (need_reconfigure)
     {
+      ROS_WARN("This reconfiguration method is deprecated. Please contact blaise@willowgarage.com if you need further support for it.");
       ROS_INFO("Reconfigured the hokuyo.");
       diagnostic_.broadcast(2,"Reconfiguring");
       bool was_running = running_;

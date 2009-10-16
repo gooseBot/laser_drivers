@@ -1,3 +1,6 @@
+rosbuild_add_executable(hokuyo._node_old hokuyo_node_old.cpp)
+target_link_libraries(hokuyo_node_old libhokuyo)
+
 rosbuild_add_executable(hokuyo_node hokuyo_node.cpp)
 target_link_libraries(hokuyo_node libhokuyo)
 

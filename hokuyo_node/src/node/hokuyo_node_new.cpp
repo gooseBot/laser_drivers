@@ -154,12 +154,14 @@ public:
   {
     try
     {
-      device_id_ = std::string("unknown");
-      device_status_ = std::string("unknown");
-
+      device_id_ = "unknown";
+      device_status_ =  "unknown";
+      
       laser_.open(config_.port.c_str(), config_.model_04LX);
-
+      
+      device_id_ = getID();
       device_status_ = laser_.getStatus();
+      
       ROS_INFO("Connected to device with ID: %s", device_id_.c_str());
 
       if (config_.calibrate_time && !calibrated_)
@@ -228,6 +230,8 @@ public:
     if (state_ != RUNNING) // RUNNING can exit asynchronously.
       return;
 
+    state_ = OPENED;
+
     if (scan_thread_ && !scan_thread_->timed_join((boost::posix_time::milliseconds) 2000))
     {
       ROS_ERROR("scan_thread_ did not die after two seconds. Pretending that it did. This is probably a bad sign.");
@@ -240,7 +244,7 @@ public:
   {
     std::string id = laser_.getID();
     if (id == std::string("H0000000"))
-      return "";
+      return "unknown";
     return id;
   }
 
@@ -412,7 +416,7 @@ public:
   {
     std::string id = driver_.getID();
 
-    if (id == "")
+    if (id == "unknown")
       status.summary(1, "Device returned ID H0000000, which indicates failure.");
     else
       status.summaryf(0, "Device ID is %s", id.c_str());

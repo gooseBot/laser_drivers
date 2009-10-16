@@ -294,8 +294,6 @@ private:
   hokuyo::LaserConfig laser_config_;
 
 public:
-  hokuyo::Laser laser_;
-
   HokuyoNode(ros::NodeHandle &nh) :
     driver_base::DriverNode<HokuyoDriver>(nh),
     node_handle_(nh),
@@ -320,7 +318,6 @@ public:
 
   virtual void addOpenedTests()
   {
-    self_test_.add( "ID Test", this, &HokuyoNode::IDTest );
     self_test_.add( "Status Test", this, &HokuyoNode::statusTest );
     self_test_.add( "Laser Test", this, &HokuyoNode::laserTest );
     self_test_.add( "Polled Data Test", this, &HokuyoNode::polledDataTest );
@@ -412,21 +409,9 @@ public:
     status.add("Corrupted Scan Count", driver_.corrupted_scan_count_);
   }
 
-  void IDTest(diagnostic_updater::DiagnosticStatusWrapper& status)
-  {
-    std::string id = driver_.getID();
-
-    if (id == "unknown")
-      status.summary(1, "Device returned ID H0000000, which indicates failure.");
-    else
-      status.summaryf(0, "Device ID is %s", id.c_str());
-
-    self_test_.setID(id);
-  }
-
   void statusTest(diagnostic_updater::DiagnosticStatusWrapper& status)
   {
-    std::string stat = laser_.getStatus();
+    std::string stat = driver_.laser_.getStatus();
 
     if (stat != std::string("Sensor works well."))
     {
@@ -440,7 +425,7 @@ public:
 
   void laserTest(diagnostic_updater::DiagnosticStatusWrapper& status)
   {
-    laser_.laserOn();
+    driver_.laser_.laserOn();
 
     status.level = 0;
     status.message = "Laser turned on successfully.";
@@ -450,7 +435,7 @@ public:
   {
     hokuyo::LaserScan  scan;
 
-    int res = laser_.pollScan(scan, laser_config_.min_angle, laser_config_.max_angle, 1, 1000);
+    int res = driver_.laser_.pollScan(scan, laser_config_.min_angle, laser_config_.max_angle, 1, 1000);
 
     if (res != 0)
     {
@@ -469,7 +454,7 @@ public:
   {
     hokuyo::LaserScan  scan;
 
-    int res = laser_.requestScans(false, laser_config_.min_angle, laser_config_.max_angle, 1, 1, 99, 1000);
+    int res = driver_.laser_.requestScans(false, laser_config_.min_angle, laser_config_.max_angle, 1, 1, 99, 1000);
 
     if (res != 0)
     {
@@ -482,7 +467,7 @@ public:
 
       for (int i = 0; i < 99; i++)
       {
-        laser_.serviceScan(scan, 1000);
+        driver_.laser_.serviceScan(scan, 1000);
       }
 
       status.level = 0;
@@ -495,7 +480,7 @@ public:
   {
     hokuyo::LaserScan  scan;
 
-    int res = laser_.requestScans(false, laser_config_.min_angle, laser_config_.max_angle, 1, 1, 99, 1000);
+    int res = driver_.laser_.requestScans(false, laser_config_.min_angle, laser_config_.max_angle, 1, 1, 99, 1000);
 
     if (res != 0)
     {
@@ -511,7 +496,7 @@ public:
       for (int i = 0; i < 99; i++)
       {
         try {
-          laser_.serviceScan(scan, 1000);
+          driver_.laser_.serviceScan(scan, 1000);
         } catch (hokuyo::CorruptedDataException &e) {
           corrupted_data++;
         }
@@ -536,7 +521,7 @@ public:
 
   void laserOffTest(diagnostic_updater::DiagnosticStatusWrapper& status)
   {
-    laser_.laserOff();
+    driver_.laser_.laserOff();
 
     status.level = 0;
     status.message = "Laser turned off successfully.";

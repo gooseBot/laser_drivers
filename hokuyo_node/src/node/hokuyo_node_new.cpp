@@ -83,8 +83,8 @@ Publishes to (name / type):
 
 Reads the following parameters from the parameter server
 
-- @b "~min_ang_degrees" : @b [double] the angle of the first range measurement in degrees (Default: -90.0)
-- @b "~max_ang_degrees" : @b [double] the angle of the last range measurement in degrees (Default: 90.0)
+- @b "~min_ang_degrees" : @b [double] DEPRECATED: the angle of the first range measurement in degrees (Default: -90.0)
+- @b "~max_ang_degrees" : @b [double] DEPRECATED: the angle of the last range measurement in degrees (Default: 90.0)
 - @b "~min_ang"         : @b [double] the angle of the first range measurement in radians (Default: -pi/2)
 - @b "~max_ang"         : @b [double] the angle of the last range measurement in radians (Default: pi/2)
 - @b "~intensity"       : @b [bool]   whether or not the hokuyo returns intensity values (Default: true)
@@ -98,47 +98,142 @@ Reads the following parameters from the parameter server
 - @b "~reconfigure"    : @b [bool] set to true to force the node to reread its configuration, the node will reset it to false when it is reconfigured (Default: false)
  **/
 
+#include "driver_base/driver.h"
+#include "driver_base/driver_node.h"
+#include <diagnostic_updater/publisher.h>
+
 #include <assert.h>
 #include <math.h>
 #include <iostream>
 #include <sstream>
 #include <iomanip>
 
-#include "ros/node.h"
-#include "ros/time.h"
-#include "ros/common.h"
+#include "ros/ros.h"
 
 #include "sensor_msgs/LaserScan.h"
 
-#include "driver_base/driver.h"
-#include "driver_base/driver_node.h"
+#include "hokuyo_node/HokuyoReconfigurator.h"
 
 #include "hokuyo.h"
-#include "hokuyo/HokuyoConfig.h"
 
 using namespace std;
 
 class HokuyoDriver : public driver_base::Driver
 {
-  hokuyo::HokuyoConfig config_;
+  friend class HokuyoNode;
+
+  typedef boost::function<void(const hokuyo::LaserScan &)> UseScanFunction;
+  UseScanFunction useScan_;
+
+  boost::shared_ptr<boost::thread> scan_thread_;
+
+  std::string device_status_;
+  std::string device_id_;
+  std::string connect_fail_;
+  
+  hokuyo::LaserScan  scan_;
+  hokuyo::Laser laser_;
+
+  bool calibrated_;
+  double desired_freq_;
+  int lost_scan_thread_count_;
+  int corrupted_scan_count_;
 
 public:
-  typedef hokuyo::HokuyoReconfigurator Reconfigurator;
+  hokuyo_node::HokuyoConfig config_;
+  typedef hokuyo_node::HokuyoReconfigurator Reconfigurator;
+
+  HokuyoDriver()
+  {
+    calibrated_ = false;
+    lost_scan_thread_count_ = 0;
+    corrupted_scan_count_ = 0;
+  }
 
   void doOpen()
   {
+    try
+    {
+      device_id_ = std::string("unknown");
+      device_status_ = std::string("unknown");
+
+      laser_.open(config_.port.c_str(), config_.model_04LX);
+
+      device_status_ = laser_.getStatus();
+      ROS_INFO("Connected to device with ID: %s", device_id_.c_str());
+
+      if (config_.calibrate_time && !calibrated_)
+      {
+        laser_.laserOn();
+
+       // first parameter false when 04LX laser used because 04LX sensor only accepts MD commands, not ME commands
+        ROS_INFO("Starting calibration");
+        laser_.calcLatency(!config_.model_04LX, config_.min_ang, config_.max_ang, config_.cluster, config_.skip);
+        calibrated_ = true; // This is a slow step that we only want to do once.
+        ROS_INFO("Calibration finished");
+      }
+
+      state_ = OPENED;
+      // first parameter false when 04LX laser used because 04LX sensor only accepts MD commands, not ME commands
+    } 
+    catch (hokuyo::Exception& e) 
+    {
+      ROS_WARN("Exception thrown while opening Hokuyo.\n%s", e.what());
+      connect_fail_ = e.what();
+      doClose();
+      return;
+    }
   }
 
   void doClose()
   {
+    try
+    {
+      laser_.close();
+    } catch (hokuyo::Exception& e) {
+      ROS_WARN("Exception thrown while trying to close:\n%s",e.what());
+    }
+    
+    state_ = CLOSED; // If we can't close, we are done for anyways.
   }
 
   void doStart()
   {
+    try
+    {
+      laser_.laserOn();
+      
+      int status = laser_.requestScans(!config_.model_04LX && config_.intensity, config_.min_ang, config_.max_ang, config_.cluster, config_.skip);
+
+      if (status != 0) {
+        ROS_WARN("Failed to request scans from device.  Status: %d.", status);
+        corrupted_scan_count_++;
+        return;
+      }
+    
+      state_ = RUNNING;
+      scan_thread_.reset(new boost::thread(boost::bind(&HokuyoDriver::scanThread, this)));
+    } 
+    catch (hokuyo::Exception& e) 
+    {
+      ROS_WARN("Exception thrown while starting Hokuyo.\n%s", e.what());
+      connect_fail_ = e.what();
+      doClose();
+      return;
+    }
   }
 
   void doStop()
   {
+    if (state_ != RUNNING) // RUNNING can exit asynchronously.
+      return;
+
+    if (scan_thread_ && !scan_thread_->timed_join((boost::posix_time::milliseconds) 2000))
+    {
+      ROS_ERROR("scan_thread_ did not die after two seconds. Pretending that it did. This is probably a bad sign.");
+      lost_scan_thread_count_++;
+    }
+    scan_thread_.reset();
   }
 
   virtual std::string getID()
@@ -148,259 +243,185 @@ public:
       return "";
     return id;
   }
-};
 
-class HokuyoNode : public driver_Node::DriverNode
-{
-private:   
-  hokuyo::LaserScan  scan_;
-  hokuyo::LaserConfig cfg_;
-
-  SelfTest<HokuyoNode> self_test_;
-  DiagnosticUpdater<HokuyoNode> diagnostic_;
-
-public:
-  hokuyo::Laser laser_;
-  sensor_msgs::LaserScan scan_msg_;
-
-  double min_ang_;
-  double max_ang_;
-  bool intensity_;
-  int cluster_;
-  int skip_;
-  string port_;
-  bool autostart_;
-  bool calibrate_time_;
-  bool LaserIsHokuyoModel04LX;
-  string frameid_;
-  string device_id_;
-  string device_status_;
-  string connect_fail_;
-
-  HokuyoNode() : ros::Node("hokuyo"), running_(false) 
+  void config_update()
   {
-    advertise<sensor_msgs::LaserScan>("scan", 100);
-    
-    read_config();
-
-    self_test_.setPretest( &HokuyoNode::pretest );
-
-    self_test_.addTest( &HokuyoNode::interruptionTest );
-    self_test_.addTest( &HokuyoNode::connectTest );
-    self_test_.addTest( &HokuyoNode::IDTest );
-    self_test_.addTest( &HokuyoNode::statusTest );
-    self_test_.addTest( &HokuyoNode::laserTest );
-    self_test_.addTest( &HokuyoNode::polledDataTest );
-    self_test_.addTest( &HokuyoNode::streamedDataTest );
-    self_test_.addTest( &HokuyoNode::streamedIntensityDataTest );
-    self_test_.addTest( &HokuyoNode::laserOffTest );
-    self_test_.addTest( &HokuyoNode::disconnectTest );
-    self_test_.addTest( &HokuyoNode::resumeTest );
-    
-    diagnostic_.addUpdater( &HokuyoNode::connectionStatus );
-    diagnostic_.addUpdater( &HokuyoNode::freqStatus );
   }
 
-  void read_config()
+  void scanThread()
   {
-    if (hasParam("~min_ang_degrees") && hasParam("~min_ang"))
-    {
-      ROS_FATAL("Minimum angle is specified in both radians and degrees");
-      shutdown();
-    }
-
-    if (hasParam("~max_ang_degrees") && hasParam("~max_ang"))
-    {
-      ROS_FATAL("Maximum angle is specified in both radians and degrees");
-      shutdown();
-    }
-
-    if (hasParam("~min_ang_degrees"))
-    {
-      getParam("~min_ang_degrees", min_ang_);
-      min_ang_ *= M_PI/180;
-    }
-    else if (hasParam("~min_ang"))
-    {
-      getParam("~min_ang", min_ang_);
-    }
-    else
-    {
-      min_ang_ = -M_PI/2.0;
-    }
-
-    if (hasParam("~max_ang_degrees"))
-    {
-      getParam("~max_ang_degrees", max_ang_);
-      max_ang_ *= M_PI/180;
-    }
-    else if (hasParam("~max_ang"))
-    {
-      getParam("~max_ang", max_ang_);
-    }
-    else
-    {
-      max_ang_ = M_PI/2.0;
-    }
-
-    param("~intensity", intensity_, true);
-    param("~cluster", cluster_, 1);
-    param("~skip", skip_, 1);
-    param("~port", port_, string("/dev/ttyACM0"));
-    param("~autostart", autostart_, true);
-    param("~calibrate_time", calibrate_time_, true);
-    param("~hokuyoLaserModel04LX", LaserIsHokuyoModel04LX, false);  // LaserIsHokuyoModel04LX must be set to true via this parameter for a model 04LX rangefinder
-    param("~frameid", frameid_, string("FRAMEID_LASER"));
-  }
-
-  void check_reconfigure()
-  {
-    bool need_reconfigure;
-    param("~reconfigure", need_reconfigure, false);
-    if (need_reconfigure)
-    {
-      ROS_INFO("Reconfigured the hokuyo.");
-      diagnostic_.broadcast(2,"Reconfiguring");
-      bool was_running = running_;
-      if (was_running)
-        stop();
-
-      read_config();
-
-      if (was_running)
-        start();
-
-      setParam("~reconfigure", false);
-      diagnostic_.force_update();
-    }
-  }
-
-  ~HokuyoNode()
-  {
-    stop();
-  }
-
-  int start()
-  {
-    stop();
-
-    ROS_DEBUG("Calling start");
-
-    try
-    {
-      device_id_ = std::string("unknown");
-      device_status_ = std::string("unknown");
-
-      laser_.open(port_.c_str(), LaserIsHokuyoModel04LX);
-
-      device_id_ = laser_.getID();
-      device_status_ = laser_.getStatus();
-      ROS_INFO("Connected to device with ID: %s", device_id_.c_str());
-
-      laser_.laserOn();
-
-      if (calibrate_time_)
-      {
-       // first parameter false when 04LX laser used because 04LX sensor only accepts MD commands, not ME commands
-        ROS_INFO("Starting calibration");
-        laser_.calcLatency(!LaserIsHokuyoModel04LX, min_ang_, max_ang_, cluster_, skip_);
-        calibrate_time_ = false; // @todo Hack so that if there is a transmission the slow calibration process does not happen again.
-        ROS_INFO("Calibration finished");
-      }
-
-      hokuyo::LaserConfig config;
-     
-      laser_.getConfig(config);
-
-      setParam("~min_ang_limit", (double)(config.min_angle));
-      setParam("~max_ang_limit", (double)(config.max_angle));
-      setParam("~min_range", (double)(config.min_range));
-      setParam("~max_range", (double)(config.max_range));
-
-      // first parameter false when 04LX laser used because 04LX sensor only accepts MD commands, not ME commands
-      int status = laser_.requestScans(!LaserIsHokuyoModel04LX && intensity_, min_ang_, max_ang_, cluster_, skip_);
-
-      if (status != 0) {
-        ROS_WARN("Failed to request scans from device.  Status: %d.", status);
-        ROS_DEBUG("Start failed");
-        return -1;
-      }
-
-      running_ = true;
-
-    } catch (hokuyo::Exception& e) {
-      ROS_WARN("Exception thrown while starting urg.\n%s", e.what());
-      connect_fail_ = e.what();
-      ROS_DEBUG("Start excepted");
-      return -1;
-    }
-    
-    ROS_DEBUG("Start completed successfully");
-
-    return(0);
-  }
-
-  int stop()
-  {
-    if(running_)
+    while (state_ == RUNNING)
     {
       try
       {
-        laser_.close();
+        int status = laser_.serviceScan(scan_);
+
+        if(status != 0)
+        {
+          ROS_WARN("Error getting scan: %d", status);
+          break;
+        }
+      } catch (hokuyo::CorruptedDataException &e) {
+        ROS_WARN("Skipping corrupted data");
+        continue;
       } catch (hokuyo::Exception& e) {
-        ROS_WARN("Exception thrown while trying to close:\n%s",e.what());
+        ROS_WARN("Exception thrown while trying to get scan.\n%s", e.what());
+        doClose();
+        return;
       }
+
+      useScan_(scan_);
     }
 
-    return 0;
+    laser_.stopScanning(); // This actually just calls laser Off internally.
+    state_ = OPENED;
+  }
+};
+
+class HokuyoNode : public driver_base::DriverNode<HokuyoDriver>
+{
+private:   
+  string device_status_;
+  string connect_fail_;
+
+  ros::NodeHandle node_handle_;
+  diagnostic_updater::DiagnosedPublisher<sensor_msgs::LaserScan> scan_pub_;
+  sensor_msgs::LaserScan scan_msg_;
+  hokuyo::LaserConfig laser_config_;
+
+public:
+  hokuyo::Laser laser_;
+
+  HokuyoNode(ros::NodeHandle &nh) :
+    driver_base::DriverNode<HokuyoDriver>(nh),
+    node_handle_(nh),
+    scan_pub_(node_handle_.advertise<sensor_msgs::LaserScan>("scan", 100),
+        diagnostic_,
+        diagnostic_updater::FrequencyStatusParam(&driver_.desired_freq_, &driver_.desired_freq_, 0.05),
+        diagnostic_updater::TimeStampStatusParam())
+  {
+    driver_.useScan_ = boost::bind(&HokuyoNode::publishScan, this, _1);
+    driver_.setPostOpenHook(boost::bind(&HokuyoNode::postOpenHook, this));
   }
 
-  int publishScan()
+  void postOpenHook()
   {
-    //ROS_DEBUG("publishScan");
-    try
-    {
-      int status = laser_.serviceScan(scan_);
+    driver_.laser_.getConfig(laser_config_);
+     
+    private_node_handle_.setParam("min_ang_limit", (double) (laser_config_.min_angle));
+    private_node_handle_.setParam("max_ang_limit", (double) (laser_config_.max_angle));
+    private_node_handle_.setParam("min_range", (double) (laser_config_.min_range));
+    private_node_handle_.setParam("max_range", (double) (laser_config_.max_range));
+  }
 
-      if(status != 0)
-      {
-        ROS_WARN("Error getting scan: %d", status);
-        return 0;
-      }
-    } catch (hokuyo::CorruptedDataException &e) {
-      ROS_WARN("Skipping corrupted data");
-      return 0;
-    } catch (hokuyo::Exception& e) {
-      ROS_WARN("Exception thrown while trying to get scan.\n%s", e.what());
-      running_ = false; //If we're here, we are no longer running
-      return -1;
+  virtual void addOpenedTests()
+  {
+    self_test_.add( "ID Test", this, &HokuyoNode::IDTest );
+    self_test_.add( "Status Test", this, &HokuyoNode::statusTest );
+    self_test_.add( "Laser Test", this, &HokuyoNode::laserTest );
+    self_test_.add( "Polled Data Test", this, &HokuyoNode::polledDataTest );
+    self_test_.add( "Streamed Data Test", this, &HokuyoNode::streamedDataTest );
+    self_test_.add( "Streamed Intensity Data Test", this, &HokuyoNode::streamedIntensityDataTest );
+    self_test_.add( "Laser Off Test", this, &HokuyoNode::laserOffTest );
+  }
+
+  virtual void addStoppedTests()
+  { 
+  }
+
+  virtual void addRunningTests()
+  { 
+  }
+
+  virtual void addDiagnostics()
+  {
+    diagnostic_.add("Connection Status", this, &HokuyoNode::connectionStatus );
+  }
+  
+  void reconfigureHook(int level)
+  {
+    if (private_node_handle_.hasParam("min_ang_degrees"))
+    {
+      ROS_WARN("~min_ang_degrees is deprecated, please use ~min_ang instead");
+      private_node_handle_.getParam("~min_ang_degrees", driver_.config_.min_ang);
+      driver_.config_.min_ang *= M_PI/180;
     }
 
-    scan_msg_.angle_min = scan_.config.min_angle;
-    scan_msg_.angle_max = scan_.config.max_angle;
-    scan_msg_.angle_increment = scan_.config.ang_increment;
-    scan_msg_.time_increment = scan_.config.time_increment;
-    scan_msg_.scan_time = scan_.config.scan_time;
-    scan_msg_.range_min = scan_.config.min_range;
-    scan_msg_.range_max = scan_.config.max_range;
-    scan_msg_.ranges = scan_.ranges;
-    scan_msg_.intensities = scan_.intensities;
-    scan_msg_.header.stamp = ros::Time().fromNSec((uint64_t)scan_.system_time_stamp);
-    scan_msg_.header.frame_id = frameid_;
+    if (private_node_handle_.hasParam("max_ang_degrees"))
+    {
+      ROS_WARN("~max_ang_degrees is deprecated, please use ~max_ang instead");
+      private_node_handle_.getParam("max_ang_degrees", driver_.config_.max_ang);
+      driver_.config_.max_ang *= M_PI/180;
+    }
 
-    publish("scan", scan_msg_);
+    if (private_node_handle_.hasParam("hokuyoLaserModel04LX"))
+    {
+      ROS_WARN("~hokuyoLaserModel04LX is deprecated, please use ~model_04LX instead");
+      bool tmp = driver_.config_.model_04LX;
+      private_node_handle_.getParam("hokuyoLaserModel04LX", tmp);
+      driver_.config_.model_04LX = tmp;
+    }
+      
+    diagnostic_.force_update();   
+  }
 
-    count_++;
-    
+  int publishScan(const hokuyo::LaserScan &scan)
+  {
+    //ROS_DEBUG("publishScan");
+
+    scan_msg_.angle_min = scan.config.min_angle;
+    scan_msg_.angle_max = scan.config.max_angle;
+    scan_msg_.angle_increment = scan.config.ang_increment;
+    scan_msg_.time_increment = scan.config.time_increment;
+    scan_msg_.scan_time = scan.config.scan_time;
+    scan_msg_.range_min = scan.config.min_range;
+    scan_msg_.range_max = scan.config.max_range;
+    scan_msg_.ranges = scan.ranges;
+    scan_msg_.intensities = scan.intensities;
+    scan_msg_.header.stamp = ros::Time().fromNSec((uint64_t)scan.system_time_stamp);
+    scan_msg_.header.frame_id = driver_.config_.frameid;
+
+    scan_pub_.publish(scan_msg_);
+
     //ROS_DEBUG("publishScan done");
 
     return(0);
   }
 
-  void statusTest(diagnostic_msgs::DiagnosticStatus& status)
+  void connectionStatus(diagnostic_updater::DiagnosticStatusWrapper& status)
   {
-    status.name = "Status Test";
+    if (driver_.state_ == driver_.CLOSED)
+      status.summary(2, "Not connected. " + connect_fail_);
+    else if (device_status_ != std::string("Sensor works well."))
+      status.summary(2, "Sensor not operational");
+    else if (driver_.state_ == driver_.RUNNING)
+      status.summary(0, "Sensor streaming.");
+    else if (driver_.state_ == driver_.OPENED)
+      status.summary(0, "Sensor open.");
+    else 
+      status.summary(2, "Unknown sensor state.");
 
+    status.add("Port", driver_.config_.port);
+    status.add("Device ID", driver_.device_id_);
+    status.add("Device Status", driver_.device_status_);
+    status.add("Scan Thread Lost Count", driver_.lost_scan_thread_count_);
+    status.add("Corrupted Scan Count", driver_.corrupted_scan_count_);
+  }
+
+  void IDTest(diagnostic_updater::DiagnosticStatusWrapper& status)
+  {
+    std::string id = driver_.getID();
+
+    if (id == "")
+      status.summary(1, "Device returned ID H0000000, which indicates failure.");
+    else
+      status.summaryf(0, "Device ID is %s", id.c_str());
+
+    self_test_.setID(id);
+  }
+
+  void statusTest(diagnostic_updater::DiagnosticStatusWrapper& status)
+  {
     std::string stat = laser_.getStatus();
 
     if (stat != std::string("Sensor works well."))
@@ -413,23 +434,19 @@ public:
     status.message = stat;
   }
 
-  void laserTest(diagnostic_msgs::DiagnosticStatus& status)
+  void laserTest(diagnostic_updater::DiagnosticStatusWrapper& status)
   {
-    status.name = "Laser Test";
-
     laser_.laserOn();
 
     status.level = 0;
     status.message = "Laser turned on successfully.";
   }
 
-  void polledDataTest(diagnostic_msgs::DiagnosticStatus& status)
+  void polledDataTest(diagnostic_updater::DiagnosticStatusWrapper& status)
   {
-    status.name = "Polled Data Test";
-
     hokuyo::LaserScan  scan;
 
-    int res = laser_.pollScan(scan, min_ang_, max_ang_, cluster_, 1000);
+    int res = laser_.pollScan(scan, laser_config_.min_angle, laser_config_.max_angle, 1, 1000);
 
     if (res != 0)
     {
@@ -444,13 +461,11 @@ public:
     }
   }
 
-  void streamedDataTest(diagnostic_msgs::DiagnosticStatus& status)
+  void streamedDataTest(diagnostic_updater::DiagnosticStatusWrapper& status)
   {
-    status.name = "Streamed Data Test";
-
     hokuyo::LaserScan  scan;
 
-    int res = laser_.requestScans(false, min_ang_, max_ang_, cluster_, skip_, 99, 1000);
+    int res = laser_.requestScans(false, laser_config_.min_angle, laser_config_.max_angle, 1, 1, 99, 1000);
 
     if (res != 0)
     {
@@ -472,13 +487,11 @@ public:
     }
   }
 
-  void streamedIntensityDataTest(diagnostic_msgs::DiagnosticStatus& status)
+  void streamedIntensityDataTest(diagnostic_updater::DiagnosticStatusWrapper& status)
   {
-    status.name = "Streamed Intensity Data Test";
-
     hokuyo::LaserScan  scan;
 
-    int res = laser_.requestScans(false, min_ang_, max_ang_, cluster_, skip_, 99, 1000);
+    int res = laser_.requestScans(false, laser_config_.min_angle, laser_config_.max_angle, 1, 1, 99, 1000);
 
     if (res != 0)
     {
@@ -517,10 +530,8 @@ public:
     }
   }
 
-  void laserOffTest(diagnostic_msgs::DiagnosticStatus& status)
+  void laserOffTest(diagnostic_updater::DiagnosticStatusWrapper& status)
   {
-    status.name = "Laser Off Test";
-
     laser_.laserOff();
 
     status.level = 0;
@@ -528,14 +539,8 @@ public:
   }
 };
 
-int
-main(int argc, char** argv)
-{
-  ros::init(argc, argv);
-
-  HokuyoNode h;
-
-  h.spin();
-
-  return(0);
+int main(int argc, char **argv)
+{ 
+  return driver_base::main<HokuyoNode>(argc, argv, "hokuyo_node");
 }
+

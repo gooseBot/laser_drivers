@@ -93,9 +93,9 @@ Reads the following parameters from the parameter server
 - @b "~port"            : @b [string] the port where the hokuyo device can be found (Default: "/dev/ttyACM0")
 - @b "~autostart"       : @b [bool]   whether the node should automatically start the hokuyo (Default: true)
 - @b "~calibrate_time"  : @b [bool]   whether the node should calibrate the hokuyo's time offset (Default: true)
-- @b "~hokuyoLaserModel04LX" : @b [bool]	whether the laser is a hokuyo mode 04LX by setting boolean LaserIsHokuyoModel04LX (Default: false)
-- @b "~frameid"        : @b [string] the frame in which laser scans will be returned (Default: "FRAMEID_LASER")
-- @b "~reconfigure"    : @b [bool] set to true to force the node to reread its configuration, the node will reset it to false when it is reconfigured (Default: false)
+- @b "~model_04LX"      : @b [bool]	whether the laser is a hokuyo model 04LX (Default: false)
+- @b "~frameid"         : @b [string] the frame in which laser scans will be returned (Default: "FRAMEID_LASER")
+- @b "~reconfigure"     : @b [bool] set to true to force the node to reread its configuration, the node will reset it to false when it is reconfigured (Default: false)
  **/
 
 #include <assert.h>
@@ -230,7 +230,12 @@ public:
     private_nh_.param("port", port_, string("/dev/ttyACM0"));
     private_nh_.param("autostart", autostart_, true);
     private_nh_.param("calibrate_time", calibrate_time_, true);
-    private_nh_.param("hokuyoLaserModel04LX", LaserIsHokuyoModel04LX, false);  // LaserIsHokuyoModel04LX must be set to true via this parameter for a model 04LX rangefinder
+    private_nh_.param("model_04LX", LaserIsHokuyoModel04LX, false);  // LaserIsHokuyoModel04LX must be set to true via this parameter for a model 04LX rangefinder
+    if (private_nh_.hasParam("hokuyoLaserModel04LX"))
+    {
+      private_nh_.getParam("hokuyoLaserModel04LX", LaserIsHokuyoModel04LX);  
+      ROS_WARN("hokuyoLaserModel04LX has deprecated. Please use model_04LX instead.");
+    }
     private_nh_.param("frameid", frameid_, string("FRAMEID_LASER"));
   }
 

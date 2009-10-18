@@ -40,47 +40,51 @@ using namespace std;
 void publish_scan(ros::Publisher *pub, uint32_t *values, uint32_t num_values, 
 		double scale, ros::Time start, double scan_time, bool inverted, std::string frame_id)
 {
-	static int scan_count = 0;
-	static double last_print_time = 0;
-	sensor_msgs::LaserScan scan_msg;
-	scan_msg.header.frame_id = frame_id;
-	scan_count++;
-	ros::Time t = start;
-	double t_d = t.toSec();
-	if (t_d > last_print_time + 1)	{
-		last_print_time = t_d;
-		printf("publishing scan %d\n", scan_count);
-	}
-	if (inverted) {
-		scan_msg.angle_min = M_PI/2;
-		scan_msg.angle_max = -M_PI/2;
-	} else {
-		scan_msg.angle_min = -M_PI/2;
-		scan_msg.angle_max = M_PI/2;
-	}
-	scan_msg.angle_increment = (scan_msg.angle_max - scan_msg.angle_min) / (double)(num_values-1);
-	scan_msg.scan_time = scan_time;
-	scan_msg.time_increment = scan_time / (double)(num_values-1);
-	scan_msg.range_min = 0;
-	if (scale == 0.01) {
-		scan_msg.range_max = 81;
-	}
-	else if (scale == 0.001) {
-		scan_msg.range_max = 8.1;
-	}
-	scan_msg.set_ranges_size(num_values);
-	scan_msg.header.stamp = t;
-	for (size_t i = 0; i < num_values; i++) {
-		scan_msg.ranges[i] = (float)values[i] * (float)scale;
-	}
-	/*
+  static int scan_count = 0;
+  static double last_print_time = 0;
+  sensor_msgs::LaserScan scan_msg;
+  scan_msg.header.frame_id = frame_id;
+  scan_count++;
+  ros::Time t = start;
+  double t_d = t.toSec();
+  if (t_d > last_print_time + 1)	{
+    last_print_time = t_d;
+    printf("publishing scan %d\n", scan_count);
+  }
+  if (inverted) {
+    scan_msg.angle_min = M_PI/2;
+    scan_msg.angle_max = -M_PI/2;
+  } else {
+    scan_msg.angle_min = -M_PI/2;
+    scan_msg.angle_max = M_PI/2;
+  }
+  scan_msg.angle_increment = (scan_msg.angle_max - scan_msg.angle_min) / (double)(num_values-1);
+  scan_msg.scan_time = scan_time;
+  scan_msg.time_increment = scan_time / (double)(num_values-1);
+  scan_msg.range_min = 0;
+  if (scale == 0.01) {
+    scan_msg.range_max = 81;
+  }
+  else if (scale == 0.001) {
+    scan_msg.range_max = 8.1;
+  }
+  //	scan_msg.set_ranges_size(num_values);
+  scan_msg.ranges.resize(num_values);
+  scan_msg.intensities.resize(num_values);
+  scan_msg.header.stamp = t;
+  for (size_t i = 0; i < num_values; i++) {
+    scan_msg.ranges[i] = (float)values[i] * (float)scale;
+    scan_msg.intensities[i] = 0;
+  }
+  /*
+
   static double prev_time = 0;
   double cur_time = ros::Time::now().toSec();
   if (rand() % 10 == 0)
-    printf("%f\n", cur_time - prev_time);
+  printf("%f\n", cur_time - prev_time);
   prev_time = cur_time;
-	 */
-	pub->publish(scan_msg);
+  */
+  pub->publish(scan_msg);
 }
 
 int main(int argc, char **argv)
@@ -95,7 +99,7 @@ int main(int argc, char **argv)
 	ros::NodeHandle nh;
 	ros::NodeHandle nh_ns("~");
 	ros::Publisher scan_pub = nh.advertise<sensor_msgs::LaserScan>("scan", 1);
-	nh_ns.param("port", port, string("/dev/ttyUSB0"));
+	nh_ns.param("port", port, string("/dev/lms200"));
 	nh_ns.param("baud", baud, 500000);
 	nh_ns.param("inverted", inverted, true);
 	nh_ns.param<std::string>("frame_id", frame_id, "base_laser");

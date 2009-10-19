@@ -49,7 +49,7 @@ void publish_scan(ros::Publisher *pub, uint32_t *values, uint32_t num_values,
   double t_d = t.toSec();
   if (t_d > last_print_time + 1)	{
     last_print_time = t_d;
-    printf("publishing scan %d\n", scan_count);
+//    printf("publishing scan %d, inverted=%d\n", scan_count, inverted);
   }
   if (inverted) {
     scan_msg.angle_min = M_PI/2;
@@ -100,8 +100,8 @@ int main(int argc, char **argv)
 	ros::NodeHandle nh_ns("~");
 	ros::Publisher scan_pub = nh.advertise<sensor_msgs::LaserScan>("scan", 1);
 	nh_ns.param("port", port, string("/dev/lms200"));
-	nh_ns.param("baud", baud, 500000);
-	nh_ns.param("inverted", inverted, true);
+	nh_ns.param("baud", baud, 38400);
+	nh_ns.param("inverted", inverted, false);
 	nh_ns.param<std::string>("frame_id", frame_id, "base_laser");
 
 	SickLMS::sick_lms_baud_t desired_baud = SickLMS::IntToSickBaud(baud);

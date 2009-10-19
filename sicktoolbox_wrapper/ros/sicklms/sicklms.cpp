@@ -70,11 +70,11 @@ void publish_scan(ros::Publisher *pub, uint32_t *values, uint32_t num_values,
   }
   //	scan_msg.set_ranges_size(num_values);
   scan_msg.ranges.resize(num_values);
-  scan_msg.intensities.resize(num_values);
+  //  scan_msg.intensities.resize(num_values);
   scan_msg.header.stamp = t;
   for (size_t i = 0; i < num_values; i++) {
     scan_msg.ranges[i] = (float)values[i] * (float)scale;
-    scan_msg.intensities[i] = 0;
+    //    scan_msg.intensities[i] = 0;
   }
   /*
 

@@ -1,8 +1,8 @@
 Background\ ColorR=0
 Background\ ColorG=0
 Background\ ColorB=0
-Fixed\ Frame=FRAMEID_LASER
-Target\ Frame=FRAMEID_LASER
+Fixed\ Frame=/FRAMEID_LASER
+Target\ Frame=/FRAMEID_LASER
 Floor\ Scan.Alpha=1
 Floor\ Scan.Autocompute\ Intensity\ Bounds=1
 Floor\ Scan.Billboard\ Size=0.01
@@ -34,10 +34,17 @@ Grid.OffsetY=0
 Grid.OffsetZ=0
 Grid.Plane=0
 Grid.Plane\ Cell\ Count=10
-Property\ Grid\ State=selection=;expanded=.Global Options,Grid;scrollpos=0,0;splitterpos=151,303;ispageselected=1
+Grid.Reference\ Frame=<Fixed Frame>
+Tool\ 2D\ Nav\ GoalTopic=goal
+Tool\ 2D\ Pose\ EstimateTopic=initialpose
+Camera\ Type=rviz::FixedOrientationOrthoViewController
+Camera\ Config=121.003 -0.957785 11.3941 -0.649553 -0.707107 -0 -0 0.707107
+Property\ Grid\ State=selection=;expanded=.Global Options;scrollpos=0,0;splitterpos=125,266;ispageselected=1
 [Display0]
-Type=Laser Scan
 Name=Floor Scan
+Package=rviz
+ClassName=rviz::LaserScanDisplay
 [Display1]
-Type=Grid
 Name=Grid
+Package=rviz
+ClassName=rviz::GridDisplay

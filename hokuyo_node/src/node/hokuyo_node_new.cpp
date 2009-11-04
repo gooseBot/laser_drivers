@@ -112,7 +112,7 @@ Reads the following parameters from the parameter server
 
 #include "sensor_msgs/LaserScan.h"
 
-#include "hokuyo_node/HokuyoReconfigurator.h"
+#include "hokuyo_node/HokuyoConfig.h"
 
 #include "hokuyo.h"
 
@@ -141,7 +141,7 @@ class HokuyoDriver : public driver_base::Driver
 
 public:
   hokuyo_node::HokuyoConfig config_;
-  typedef hokuyo_node::HokuyoReconfigurator Reconfigurator;
+  typedef hokuyo_node::HokuyoConfig Config;
 
   HokuyoDriver()
   {
@@ -248,8 +248,9 @@ public:
     return id;
   }
 
-  void config_update()
+  void config_update(Config &new_config, int level = 0)
   {
+    config_ = new_config;
   }
 
   void scanThread()

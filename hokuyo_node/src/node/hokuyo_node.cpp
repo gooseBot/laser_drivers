@@ -135,7 +135,6 @@ class HokuyoDriver : public driver_base::Driver
   hokuyo::Laser laser_;
 
   bool calibrated_;
-  double desired_freq_;
   int lost_scan_thread_count_;
   int corrupted_scan_count_;
 
@@ -287,6 +286,8 @@ class HokuyoNode : public driver_base::DriverNode<HokuyoDriver>
 {
 private:   
   string connect_fail_;
+  
+  double desired_freq_;
 
   ros::NodeHandle node_handle_;
   diagnostic_updater::DiagnosedPublisher<sensor_msgs::LaserScan> scan_pub_;
@@ -299,9 +300,10 @@ public:
     node_handle_(nh),
     scan_pub_(node_handle_.advertise<sensor_msgs::LaserScan>("scan", 100),
         diagnostic_,
-        diagnostic_updater::FrequencyStatusParam(&driver_.desired_freq_, &driver_.desired_freq_, 0.05),
+        diagnostic_updater::FrequencyStatusParam(&desired_freq_, &desired_freq_, 0.05),
         diagnostic_updater::TimeStampStatusParam())
   {
+    desired_freq_ = 0;
     driver_.useScan_ = boost::bind(&HokuyoNode::publishScan, this, _1);
     driver_.setPostOpenHook(boost::bind(&HokuyoNode::postOpenHook, this));
   }
@@ -364,6 +366,8 @@ public:
     }
       
     diagnostic_.force_update();   
+  
+    scan_pub_.clear_window(); // Reduce glitches in the frequency diagnostic.
   }
 
   int publishScan(const hokuyo::LaserScan &scan)
@@ -381,6 +385,8 @@ public:
     scan_msg_.intensities = scan.intensities;
     scan_msg_.header.stamp = ros::Time().fromNSec((uint64_t)scan.system_time_stamp);
     scan_msg_.header.frame_id = driver_.config_.frameid;
+  
+    desired_freq_ = (1. / scan.config.scan_time);
 
     scan_pub_.publish(scan_msg_);
 

@@ -286,7 +286,6 @@ public:
 class HokuyoNode : public driver_base::DriverNode<HokuyoDriver>
 {
 private:   
-  string device_status_;
   string connect_fail_;
 
   ros::NodeHandle node_handle_;
@@ -345,7 +344,7 @@ public:
     if (private_node_handle_.hasParam("min_ang_degrees"))
     {
       ROS_WARN("~min_ang_degrees is deprecated, please use ~min_ang instead");
-      private_node_handle_.getParam("~min_ang_degrees", driver_.config_.min_ang);
+      private_node_handle_.getParam("min_ang_degrees", driver_.config_.min_ang);
       driver_.config_.min_ang *= M_PI/180;
     }
 
@@ -394,7 +393,7 @@ public:
   {
     if (driver_.state_ == driver_.CLOSED)
       status.summary(2, "Not connected. " + connect_fail_);
-    else if (device_status_ != std::string("Sensor works well."))
+    else if (driver_.device_status_ != std::string("Sensor works well."))
       status.summary(2, "Sensor not operational");
     else if (driver_.state_ == driver_.RUNNING)
       status.summary(0, "Sensor streaming.");

@@ -169,7 +169,7 @@ public:
 
        // first parameter false when 04LX laser used because 04LX sensor only accepts MD commands, not ME commands
         ROS_INFO("Starting calibration");
-        laser_.calcLatency(!config_.model_04LX, config_.min_ang, config_.max_ang, config_.cluster, config_.skip);
+        laser_.calcLatency(!config_.model_04LX && config_.intensity, config_.min_ang, config_.max_ang, config_.cluster, config_.skip);
         calibrated_ = true; // This is a slow step that we only want to do once.
         ROS_INFO("Calibration finished");
       }

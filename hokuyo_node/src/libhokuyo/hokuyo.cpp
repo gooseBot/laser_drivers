@@ -89,7 +89,7 @@ hokuyo::Laser::~Laser ()
 
 ///////////////////////////////////////////////////////////////////////////////
 void
-hokuyo::Laser::open(const char * port_name, bool LaserIsHokuyoModel04LX = false)
+hokuyo::Laser::open(const char * port_name, bool LaserIsHokuyoModel04LX)
 {
   if (portOpen())
     close();

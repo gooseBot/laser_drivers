@@ -89,7 +89,7 @@ hokuyo::Laser::~Laser ()
 
 ///////////////////////////////////////////////////////////////////////////////
 void
-hokuyo::Laser::open(const char * port_name, bool LaserIsHokuyoModel04LX)
+hokuyo::Laser::open(const char * port_name, bool LaserIsHokuyoModel04LX = false)
 {
   if (portOpen())
     close();
@@ -133,14 +133,9 @@ hokuyo::Laser::open(const char * port_name, bool LaserIsHokuyoModel04LX)
     tcsetattr (laser_fd_, TCSANOW, &newtio);
     usleep (200000);
 
-    //if we have a Hokyo model 04LX laser rangefinder, we have to tell it to go to SCIP2 mode
-    if (LaserIsHokuyoModel04LX)
-	 {
-		laserFlush();
+    // Some models (04LX) need to be told to go into SCIP2 mode...
+    laserFlush();
     setToSCIP2();
-		laserFlush();
-	 }
-
 
     // Just in case a previous failure mode has left our Hokuyo
     // spewing data, we send the TM2 and QT commands to be safe.

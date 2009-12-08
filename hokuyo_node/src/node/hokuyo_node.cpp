@@ -83,8 +83,6 @@ Publishes to (name / type):
 
 Reads the following parameters from the parameter server
 
-- @b "~min_ang_degrees" : @b [double] DEPRECATED: the angle of the first range measurement in degrees (Default: -90.0)
-- @b "~max_ang_degrees" : @b [double] DEPRECATED: the angle of the last range measurement in degrees (Default: 90.0)
 - @b "~min_ang"         : @b [double] the angle of the first range measurement in radians (Default: -pi/2)
 - @b "~max_ang"         : @b [double] the angle of the last range measurement in radians (Default: pi/2)
 - @b "~intensity"       : @b [bool]   whether or not the hokuyo returns intensity values (Default: true)
@@ -94,7 +92,7 @@ Reads the following parameters from the parameter server
 - @b "~autostart"       : @b [bool]   whether the node should automatically start the hokuyo (Default: true)
 - @b "~calibrate_time"  : @b [bool]   whether the node should calibrate the hokuyo's time offset (Default: true)
 - @b "~hokuyoLaserModel04LX" : @b [bool]	whether the laser is a hokuyo mode 04LX by setting boolean LaserIsHokuyoModel04LX (Default: false)
-- @b "~frameid"        : @b [string] the frame in which laser scans will be returned (Default: "FRAMEID_LASER")
+- @b "~frame_id"        : @b [string] the frame in which laser scans will be returned (Default: "laser")
 - @b "~reconfigure"    : @b [bool] set to true to force the node to reread its configuration, the node will reset it to false when it is reconfigured (Default: false)
  **/
 
@@ -343,6 +341,12 @@ public:
   
   void reconfigureHook(int level)
   {
+    if (private_node_handle_.hasParam("frameid"))
+    {
+      ROS_WARN("~frameid is deprecated, please use ~frame_id instead");
+      private_node_handle_.getParam("frameid", driver_.config_.frame_id);
+    }
+
     if (private_node_handle_.hasParam("min_ang_degrees"))
     {
       ROS_WARN("~min_ang_degrees is deprecated, please use ~min_ang instead");
@@ -384,7 +388,7 @@ public:
     scan_msg_.ranges = scan.ranges;
     scan_msg_.intensities = scan.intensities;
     scan_msg_.header.stamp = ros::Time().fromNSec((uint64_t)scan.system_time_stamp);
-    scan_msg_.header.frame_id = driver_.config_.frameid;
+    scan_msg_.header.frame_id = driver_.config_.frame_id;
   
     desired_freq_ = (1. / scan.config.scan_time);
 

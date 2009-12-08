@@ -91,7 +91,6 @@ Reads the following parameters from the parameter server
 - @b "~port"            : @b [string] the port where the hokuyo device can be found (Default: "/dev/ttyACM0")
 - @b "~autostart"       : @b [bool]   whether the node should automatically start the hokuyo (Default: true)
 - @b "~calibrate_time"  : @b [bool]   whether the node should calibrate the hokuyo's time offset (Default: true)
-- @b "~hokuyoLaserModel04LX" : @b [bool]	whether the laser is a hokuyo mode 04LX by setting boolean LaserIsHokuyoModel04LX (Default: false)
 - @b "~frame_id"        : @b [string] the frame in which laser scans will be returned (Default: "laser")
 - @b "~reconfigure"    : @b [bool] set to true to force the node to reread its configuration, the node will reset it to false when it is reconfigured (Default: false)
  **/
@@ -154,7 +153,7 @@ public:
       device_id_ = "unknown";
       device_status_ =  "unknown";
       
-      laser_.open(config_.port.c_str(), config_.model_04LX);
+      laser_.open(config_.port.c_str());
       
       device_id_ = getID();
       device_status_ = laser_.getStatus();
@@ -165,15 +164,13 @@ public:
       {
         laser_.laserOn();
 
-       // first parameter false when 04LX laser used because 04LX sensor only accepts MD commands, not ME commands
         ROS_INFO("Starting calibration");
-        laser_.calcLatency(!config_.model_04LX && config_.intensity, config_.min_ang, config_.max_ang, config_.cluster, config_.skip);
+        laser_.calcLatency(config_.intensity, config_.min_ang, config_.max_ang, config_.cluster, config_.skip);
         calibrated_ = true; // This is a slow step that we only want to do once.
         ROS_INFO("Calibration finished");
       }
 
       state_ = OPENED;
-      // first parameter false when 04LX laser used because 04LX sensor only accepts MD commands, not ME commands
     } 
     catch (hokuyo::Exception& e) 
     {
@@ -202,7 +199,7 @@ public:
     {
       laser_.laserOn();
       
-      int status = laser_.requestScans(!config_.model_04LX && config_.intensity, config_.min_ang, config_.max_ang, config_.cluster, config_.skip);
+      int status = laser_.requestScans(config_.intensity, config_.min_ang, config_.max_ang, config_.cluster, config_.skip);
 
       if (status != 0) {
         ROS_WARN("Failed to request scans from device.  Status: %d.", status);
@@ -361,14 +358,6 @@ public:
       driver_.config_.max_ang *= M_PI/180;
     }
 
-    if (private_node_handle_.hasParam("hokuyoLaserModel04LX"))
-    {
-      ROS_WARN("~hokuyoLaserModel04LX is deprecated, please use ~model_04LX instead");
-      bool tmp = driver_.config_.model_04LX;
-      private_node_handle_.getParam("hokuyoLaserModel04LX", tmp);
-      driver_.config_.model_04LX = tmp;
-    }
-      
     diagnostic_.force_update();   
   
     scan_pub_.clear_window(); // Reduce glitches in the frequency diagnostic.

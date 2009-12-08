@@ -1,6 +1,0 @@
-<launch>
-  <include file="$(find hokuyo_node)/hokuyo_test.launch" />
-  <group ns="hokuyo">
-    <param name="model_04LX" type="bool" value="true"/>
-  </group>
-</launch>

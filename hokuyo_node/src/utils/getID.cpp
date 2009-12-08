@@ -48,14 +48,7 @@ main(int argc, char** argv)
   }
   
   hokuyo::Laser laser;
-  try
-  {
-    laser.open(argv[1], false);
-  }
-  catch (hokuyo::Exception& e)
-  {
-    laser.open(argv[1], true);
-  }
+  laser.open(argv[1]);
   
   std::string device_id = laser.getID();
   if (argc == 2)

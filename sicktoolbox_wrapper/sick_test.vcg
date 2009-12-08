@@ -1,8 +1,8 @@
 Background\ ColorR=0
 Background\ ColorG=0
 Background\ ColorB=0
-Fixed\ Frame=/base_laser
-Target\ Frame=/base_laser
+Fixed\ Frame=/laser
+Target\ Frame=/laser
 Floor\ Scan.Alpha=1
 Floor\ Scan.Autocompute\ Intensity\ Bounds=0
 Floor\ Scan.Billboard\ Size=0.01

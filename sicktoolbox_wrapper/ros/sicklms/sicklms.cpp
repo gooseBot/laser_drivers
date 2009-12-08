@@ -102,7 +102,7 @@ int main(int argc, char **argv)
 	nh_ns.param("port", port, string("/dev/lms200"));
 	nh_ns.param("baud", baud, 38400);
 	nh_ns.param("inverted", inverted, false);
-	nh_ns.param<std::string>("frame_id", frame_id, "base_laser");
+	nh_ns.param<std::string>("frame_id", frame_id, "laser");
 
 	SickLMS::sick_lms_baud_t desired_baud = SickLMS::IntToSickBaud(baud);
 	if (desired_baud == SickLMS::SICK_BAUD_UNKNOWN)

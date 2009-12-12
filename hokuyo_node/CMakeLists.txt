@@ -10,7 +10,7 @@ rosbuild_find_ros_package(dynamic_reconfigure)
 include(${dynamic_reconfigure_PACKAGE_PATH}/cmake/cfgbuild.cmake)
 
 gencfg()
-rosbuild_genmsg()
-rosbuild_gensrv()
+#rosbuild_genmsg()
+#rosbuild_gensrv()
 
 add_subdirectory(src)

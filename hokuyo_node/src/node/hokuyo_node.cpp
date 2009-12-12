@@ -170,13 +170,13 @@ public:
         ROS_INFO("Calibration finished");
       }
 
+      setStatusMessage("Device opened successfully.");
       state_ = OPENED;
     } 
     catch (hokuyo::Exception& e) 
     {
-      ROS_WARN("Exception thrown while opening Hokuyo.\n%s", e.what());
-      connect_fail_ = e.what();
       doClose();
+      setStatusMessagef("Exception thrown while opening Hokuyo.\n%s", e.what());
       return;
     }
   }
@@ -186,8 +186,9 @@ public:
     try
     {
       laser_.close();
+      setStatusMessage("Device closed successfully.");
     } catch (hokuyo::Exception& e) {
-      ROS_WARN("Exception thrown while trying to close:\n%s",e.what());
+      setStatusMessagef("Exception thrown while trying to close:\n%s",e.what());
     }
     
     state_ = CLOSED; // If we can't close, we are done for anyways.
@@ -202,19 +203,20 @@ public:
       int status = laser_.requestScans(config_.intensity, config_.min_ang, config_.max_ang, config_.cluster, config_.skip);
 
       if (status != 0) {
-        ROS_WARN("Failed to request scans from device.  Status: %d.", status);
+        setStatusMessagef("Failed to request scans from device.  Status: %d.", status);
         corrupted_scan_count_++;
         return;
       }
     
+      setStatusMessagef("Waiting for first scan.");
       state_ = RUNNING;
       scan_thread_.reset(new boost::thread(boost::bind(&HokuyoDriver::scanThread, this)));
     } 
     catch (hokuyo::Exception& e) 
     {
-      ROS_WARN("Exception thrown while starting Hokuyo.\n%s", e.what());
-      connect_fail_ = e.what();
       doClose();
+      setStatusMessagef("Exception thrown while starting Hokuyo.\n%s", e.what());
+      connect_fail_ = e.what();
       return;
     }
   }
@@ -223,6 +225,8 @@ public:
   {
     if (state_ != RUNNING) // RUNNING can exit asynchronously.
       return;
+
+    setStatusMessagef("Stopped.");
 
     state_ = OPENED;
 
@@ -264,11 +268,12 @@ public:
         ROS_WARN("Skipping corrupted data");
         continue;
       } catch (hokuyo::Exception& e) {
-        ROS_WARN("Exception thrown while trying to get scan.\n%s", e.what());
         doClose();
+        ROS_WARN("Exception thrown while trying to get scan.\n%s", e.what());
         return;
       }
 
+      setStatusMessage("Scanning.");
       useScan_(scan_);
     }
 
@@ -311,6 +316,8 @@ public:
     private_node_handle_.setParam("max_ang_limit", (double) (laser_config_.max_angle));
     private_node_handle_.setParam("min_range", (double) (laser_config_.min_range));
     private_node_handle_.setParam("max_range", (double) (laser_config_.max_range));
+
+    diagnostic_.setHardwareID(driver_.getID());
   }
 
   virtual void addOpenedTests()

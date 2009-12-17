@@ -2,7 +2,7 @@
   <description>A ROS node to provide access to SCIP2.0-compliant Hokuyo laser devices (including 04LX).</description>
   <author>Brian P. Gerkey, Jeremy Leibs, Blaise Gassend</author>
   <license>LGPL</license>
-  <review status="API cleared" notes="Tully to code review"/>
+  <review status="API cleared"/>
   <depend package="roscpp" />
   <depend package="sensor_msgs" />
   <depend package="driver_base" />

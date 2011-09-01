@@ -2,7 +2,7 @@
   <description brief="Laser drivers for Hokuyo and SICK laser rangefinders">
   This stack contains drivers for laser rangefinders, including Hokuyo SCIP 2.0-compliant and SICK models.
   </description>
-  <author>Maintained by Melonee Wise</author>
+  <author>Maintained by Chad Rockey</author>
   <license>BSD,LGPL</license>  
   <review status="Doc reviewed" notes="2010/01/18"/>
   <url>http://ros.org/wiki/laser_drivers</url>

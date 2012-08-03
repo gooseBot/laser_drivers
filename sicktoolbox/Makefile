@@ -1,17 +1,24 @@
 all: installed
 
-TARBALL = build/sicktoolbox-1.0.tar.gz
-TARBALL_URL = http://pr.willowgarage.com/downloads/sicktoolbox-1.0.tar.gz
-SOURCE_DIR = build/sicktoolbox-1.0
-#MD5SUM_FILE = sicktoolbox-1.0.tar.gz.md5sum
-UNPACK_CMD = tar xzf
-TARBALL_PATCH = stdlib_include.patch power_delay.patch 
 
-include $(shell rospack find mk)/download_unpack_build.mk
+GIT_DIR = build/sicktoolbox-trunk
+GIT_URL = https://github.com/hawesie/sicktoolbox.git
+GIT_PATCH =  
+#TARBALL_PATCH = stdlib_include.patch power_delay.patch 
+GIT_REVISION = #-
 
-installed: wiped $(SOURCE_DIR)/unpacked
-	cd $(SOURCE_DIR) && ./configure --prefix=`rospack find sicktoolbox`/sicktoolbox
-	cd $(SOURCE_DIR) && make && make install
+
+include $(shell rospack find mk)/git_checkout.mk
+
+installed: wiped $(GIT_DIR)
+        # extra stuff from autoconf version
+	cd $(GIT_DIR) && libtoolize
+	cd $(GIT_DIR) && aclocal -I m4
+	cd $(GIT_DIR) && autoheader
+	cd $(GIT_DIR) && automake --add-missing
+	cd $(GIT_DIR) && autoconf
+	cd $(GIT_DIR) && ./configure --prefix=`rospack find sicktoolbox`/sicktoolbox
+	cd $(GIT_DIR) && make && make install
 	touch installed
 
 wiped: Makefile
@@ -19,10 +26,10 @@ wiped: Makefile
 	touch wiped
 
 clean:
-	-rm -rf sicktoolbox-1.0 sicktoolbox
+	-rm -rf sicktoolbox-trunk sicktoolbox
 	rm -f *~ installed
 
 .PHONY : clean wipe
 
 wipe: clean
-	rm -f sicktoolbox-1.0.tar.gz
+	rm -rf $(GIT_DIR)

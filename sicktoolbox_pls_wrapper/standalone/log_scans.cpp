@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////
-// a little program that dumps LMS scans to disk in ASCII.
+// a little program that dumps PLS scans to disk in ASCII.
 //
 // Copyright (C) 2010, Morgan Quigley
 //
@@ -34,7 +34,7 @@ extern "C" {
 #include <stdint.h>
 }
 #include <cstdio>
-#include <sicklms-1.0/SickLMS.hh>
+#include <sickpls/SickPLS.hh>
 #include <ros/time.h>
 using namespace SickToolbox;
 using namespace std;
@@ -58,20 +58,20 @@ int main(int argc, char **argv)
     fprintf(stderr, "couldn't open logfile %s\n", argv[3]);
     return 1;
   }
-  string lms_dev = argv[1];
-  SickLMS::sick_lms_baud_t desired_baud = SickLMS::StringToSickBaud(argv[2]);
-  if (desired_baud == SickLMS::SICK_BAUD_UNKNOWN)
+  string pls_dev = argv[1];
+  SickPLS::sick_pls_baud_t desired_baud = SickPLS::StringToSickBaud(argv[2]);
+  if (desired_baud == SickPLS::SICK_BAUD_UNKNOWN)
   {
     printf("bad baud rate. must be one of {9600, 19200, 38400, 500000}\n");
     return 1;
   }
   signal(SIGINT, ctrlc_handler);
-  uint32_t values[SickLMS::SICK_MAX_NUM_MEASUREMENTS] = {0};
+  uint32_t values[SickPLS::SICK_MAX_NUM_MEASUREMENTS] = {0};
   uint32_t num_values = 0;
-  SickLMS sick_lms(lms_dev);
+  SickPLS sick_pls(pls_dev);
   try
   {
-    sick_lms.Initialize(desired_baud);
+    sick_pls.Initialize(desired_baud);
   }
   catch (...)
   {
@@ -81,7 +81,7 @@ int main(int argc, char **argv)
   {
     while (!got_ctrlc)
     {
-      sick_lms.GetSickScan(values, num_values);
+      sick_pls.GetSickScan(values, num_values);
       // print 12 ranges to the console
       int inc = num_values / 11;
       printf("%5d %5d %5d %5d %5d %5d %5d %5d %5d %5d %5d %5d\n", 
@@ -104,7 +104,7 @@ int main(int argc, char **argv)
   }
   try
   {
-    sick_lms.Uninitialize();
+    sick_pls.Uninitialize();
   }
   catch (...)
   {

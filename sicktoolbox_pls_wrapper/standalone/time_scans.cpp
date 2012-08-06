@@ -34,7 +34,7 @@
 #include <csignal>
 #include <stdint.h>
 #include <cstdio>
-#include <sicklms-1.0/SickLMS.hh>
+#include <sickpls/SickPLS.hh>
 #include "ros/time.h"
 using namespace SickToolbox;
 using namespace std;
@@ -52,44 +52,53 @@ int main(int argc, char **argv)
     printf("Usage: print_scans DEVICE BAUD_RATE\n");
     return 1;
   }
-  string lms_dev = argv[1];
-  SickLMS::sick_lms_baud_t desired_baud = SickLMS::StringToSickBaud(argv[2]);
-  if (desired_baud == SickLMS::SICK_BAUD_UNKNOWN)
+  string pls_dev = argv[1];
+  SickPLS::sick_pls_baud_t desired_baud = SickPLS::StringToSickBaud(argv[2]);
+  if (desired_baud == SickPLS::SICK_BAUD_UNKNOWN)
   {
     printf("bad baud rate. must be one of {9600, 19200, 38400, 500000}\n");
     return 1;
   }
+
   signal(SIGINT, ctrlc_handler);
-  uint32_t values[SickLMS::SICK_MAX_NUM_MEASUREMENTS] = {0};
+
+  uint32_t values[SickPLS::SICK_MAX_NUM_MEASUREMENTS] = {0};
   uint32_t num_values = 0;
-  SickLMS sick_lms(lms_dev);
+  SickPLS sick_pls(pls_dev);
+
   try
   {
-    sick_lms.Initialize(desired_baud);
+    sick_pls.Initialize(desired_baud);
   }
   catch (...)
   {
     printf("initialize failed! are you using the correct device path?\n");
   }
+
   try
   {
     ros::Time prev_scan_time = ros::Time::now();
-    while (!got_ctrlc)
-    {
-      sick_lms.GetSickScan(values, num_values);
+    while (!got_ctrlc) {
+      sick_pls.GetSickScan(values, num_values);
       ros::Time t = ros::Time::now();
       double delta = t.toSec() - prev_scan_time.toSec();
       printf("%f (%f)\n", delta, 1.0 / delta);
       prev_scan_time = t;
     }
   }
+  catch (SickException &e)
+  {
+    std::cout<<"Exception: "<<e.what()<<std::endl;
+  }
   catch (...)
   {
     printf("woah! error!\n");
   }
+
+
   try
   {
-    sick_lms.Uninitialize();
+    sick_pls.Uninitialize();
   }
   catch (...)
   {
@@ -97,6 +106,8 @@ int main(int argc, char **argv)
     return 1;
   }
   printf("success.\n");
+
+
   return 0;
 }
 

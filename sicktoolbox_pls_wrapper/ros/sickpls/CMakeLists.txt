@@ -1,0 +1,1 @@
+rosbuild_add_executable(sick_pls_wrapper sickpls.cpp)
